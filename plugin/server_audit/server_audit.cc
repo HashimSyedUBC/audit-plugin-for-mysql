@@ -1023,6 +1023,18 @@ void cleanup_log_files() {
             snprintf(file_path, sizeof(file_path), "%s/%s", dir_path, entry->d_name);
             remove(file_path);
           }
+          if (logfile->rotations != NULL && entry_number > 0 && static_cast<unsigned int>(entry_number) <= logfile->rotations) {
+            int number_of_zeroes = countDigits(logfile->rotations);
+            char new_name[PATH_MAX];
+            char* padded_number = pad_with_zeros(entry_number, number_of_zeroes);
+            snprintf(new_name, sizeof(new_name), "%s%s%s", log_file_name, ".", padded_number);
+            free(padded_number);
+            char old_path[PATH_MAX];
+            char new_path[PATH_MAX];
+            snprintf(old_path, sizeof(old_path), "%s/%s", dir_path, entry->d_name);
+            snprintf(new_path, sizeof(new_path), "%s/%s", dir_path, new_name);
+            rename(old_path, new_path);
+          }
         }
     }
     // Close the directory
