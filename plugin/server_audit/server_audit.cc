@@ -20,6 +20,14 @@
 #define PLUGIN_STR_VERSION "1.4.11"
 
 #define _my_thread_var loc_thread_var
+#include <algorithm>
+#include <cctype>
+#include <cstdio>
+#include <cstring>
+#include <dirent.h> 
+#include <string>
+#include <unistd.h>  
+#include <vector>
 
 #include <my_config.h>
 #include <assert.h>
@@ -905,6 +913,122 @@ static int get_user_host(const char *uh_line, unsigned int uh_len,
 #define S_ISDIR(x) ((x) & _S_IFDIR)
 #endif /*__WIN__ && !S_ISDIR*/
 
+int extractNumber(const char* str) { // Extracts number from file name
+    int num = 0;
+    int i = 0;
+    int found_dot = 0;
+
+    for (; str[i]; i++) {
+        if (str[i] == '.') {
+            found_dot = 1;
+            continue;
+        }
+        if (found_dot && str[i] >= '0' && str[i] <= '9') {
+            num = num * 10 + (str[i] - '0');
+        }
+    }
+
+    return num;
+}
+
+int countDigits(int num) {
+    int count = 0;
+    
+    if (num == 0) {
+        return 1; // Special case for 0, which has 1 digit
+    }
+    
+    while (num != 0) {
+        count++;
+        num /= 10;
+    }
+    
+    return count;
+}
+
+char* pad_with_zeros(int suffix, int n_z) {
+    int digits = 0;
+    int temp = suffix;
+    char* result;
+    while (temp != 0) {
+        temp /= 10;
+        digits++;
+    }
+
+    if (digits >= n_z) {
+        if (malloc((digits + 1) * sizeof(char)) == NULL) {
+          return NULL;
+        }
+        result = (char*)malloc((digits + 1) * sizeof(char));
+        
+        sprintf(result, "%d", suffix);
+        return result;
+    }
+
+    int padding_zeros = n_z - digits;
+    if (malloc((n_z + 1) * sizeof(char)) == NULL) {
+        // Handle memory allocation failure
+        return NULL;
+    } 
+    result = (char*)malloc((n_z + 1) * sizeof(char));
+  
+    memset(result, '0', padding_zeros);
+    sprintf(result + padding_zeros, "%d", suffix);
+    result[n_z] = '\0';
+    return result;
+}
+
+
+void cleanup_log_files() {
+    if (logfile == NULL) {
+        return; 
+    }
+
+    char logfile_path[PATH_MAX];
+    strcpy(logfile_path, logfile->path);
+
+    char dir_path[PATH_MAX];
+    strcpy(dir_path, logfile_path);
+    char* last_slash = strrchr(dir_path, '/');
+    if (last_slash != NULL) {
+        *last_slash = '\0'; // Truncate the directory path to remove the file name
+    } else {
+        strcpy(dir_path, "."); // If no directory is specified, use the current directory
+    }
+    DIR* dir = opendir(dir_path);
+    if (dir == NULL) {
+        fprintf(stderr, "Failed to open directory while cleanup: %s\n", dir_path);
+        return;
+    }
+    char log_file_name[PATH_MAX];
+    char* l_s = strrchr(logfile_path, '/');
+    if (l_s != NULL) {
+        strcpy(log_file_name, l_s + 1); // Copy from the character after the last slash
+    } else {
+        strcpy(log_file_name, logfile_path); 
+    }
+
+
+    char* last_dot = strrchr(log_file_name, '.');
+    if (last_dot != NULL) {
+        *last_dot = '\0'; 
+    }
+    // Iterate through the directory and delete log files
+    struct dirent* entry;
+    while ((entry = readdir(dir)) != NULL) {
+        int entry_number = extractNumber(entry->d_name);
+        if (strncmp(entry->d_name, log_file_name, strlen(log_file_name)) == 0) {
+          if (static_cast<unsigned int>(entry_number) > logfile->rotations) {
+            char file_path[PATH_MAX];
+            snprintf(file_path, sizeof(file_path), "%s/%s", dir_path, entry->d_name);
+            remove(file_path);
+          }
+        }
+    }
+    // Close the directory
+    closedir(dir);
+}
+
 static int start_logging()
 {
   last_error_buf[0]= 0;
@@ -972,6 +1096,7 @@ static int start_logging()
     static_assert(sizeof current_log_buf > sizeof "[SYSLOG]", "Wrong log size");
   }
   is_active= 1;
+  cleanup_log_files();
   return 0;
 }
 
@@ -2292,6 +2417,7 @@ static void update_file_rotations(MYSQL_THD thd  __attribute__((unused)),
   mysql_prlock_wrlock(&lock_operations);
   logfile->rotations= rotations;
   mysql_prlock_unlock(&lock_operations);
+  cleanup_log_files();
 }
 
 

@@ -276,6 +276,139 @@ uninstall plugin test_plugin_server;
 --replace_regex /[0-9]* [0-9][0-9]:[0-9][0-9]:[0-9][0-9]\,[^,]*\,([^,]*)\,([^,]*)\,[0-9][0-9]*\,[0-9][0-9]*\,/TIME,HOSTNAME,\1,\2,CONNECTION_ID,QUERY_ID,/
 --exec cat $MYSQLD_DATADIR/server_audit.log;
 
+--echo =======================================================================
+--echo Remove useless logs upon file rotations 
+--echo =======================================================================
+--echo #
+--echo # Create test directory and files
+--perl
+use File::Path qw(make_path);
+my $test_dir = $ENV{MYSQLTEST_VARDIR} . '/mysqld.1/data';
+make_path($test_dir);
+for my $i (0..4) {
+  my $file = "custom_log";
+  $file .= ".$i" if $i;
+  open(my $fh, '>', "$test_dir/$file") or die "Could not open file $test_dir/$file: $!";
+  print $fh "This is file $file\n";
+  close $fh;
+}
+
+EOF
+
+--echo #
+--echo # Set server audit file path and rotate files
+SET GLOBAL server_audit_file_path = 'custom_log';
+SET GLOBAL server_audit_logging = ON;
+SET GLOBAL server_audit_file_rotations = 2;
+
+--perl
+use File::Basename;
+my $test_dir = $ENV{MYSQLTEST_VARDIR} . '/mysqld.1/data';
+my $dir_contents = `ls -1 "$test_dir"`;
+my @files = split /\n/, $dir_contents;
+
+my $file_3_present = grep { $_ eq 'custom_log.3' } @files;
+my $file_4_present = grep { $_ eq 'custom_log.4' } @files;
+my $file_2_present = grep { $_ eq 'custom_log.2' } @files;
+
+
+if ($file_3_present or $file_4_present) {
+  die "Error: custom_log.3 and/or custom_log.4 are still present in the directory";
+} else {
+  if ($file_2_present) {
+    print "Success: custom_log.3 and custom_log.4 were deleted as expected. Custom_log.2 persisted \n";
+  } else {
+    die "Error: Deleted custom_log.2";
+  }
+}
+
+EOF
+
+--echo # Cleanup
+--perl
+my $dir_contents = `ls -1 "$test_dir"`;
+my @files = grep { -f "$test_dir/$_" } split /\n/, $dir_contents;
+
+foreach my $file (@files) {
+    if ($file =~ /^custom_log\./) {
+        unlink "$test_dir/$file" or die "Cannot remove $test_dir/$file: $!";
+    }
+}
+
+print "Cleanup completed successfully.\n";
+
+EOF
+
+
+SET GLOBAL server_audit_logging = OFF;
+SET GLOBAL server_audit_file_path = '';
+SET GLOBAL server_audit_file_rotations = DEFAULT;
+
+
+--echo =======================================================================
+--echo Log file should presist when under limit
+--echo =======================================================================
+--echo #
+--echo # Create test directory and files
+--perl
+use File::Path qw(make_path);
+my $test_dir = $ENV{MYSQLTEST_VARDIR} . '/mysqld.1/data';
+make_path($test_dir);
+for my $i (0..2) {
+  my $file = "custom_log";
+  $file .= ".$i" if $i > 0;
+  open(my $fh, '>', "$test_dir/$file") or die "Could not open file $test_dir/$file: $!";
+  print $fh "This is file $file\n";
+  close $fh;
+}
+EOF
+
+--echo #
+--echo # Set server audit file path and rotate files
+SET GLOBAL server_audit_file_path = 'custom_log';
+SET GLOBAL server_audit_logging = ON;
+SET GLOBAL server_audit_file_rotations = 2;
+
+--perl
+use File::Basename;
+my $test_dir = $ENV{MYSQLTEST_VARDIR} . '/mysqld.1/data';
+my $dir_contents = `ls -1 "$test_dir"`;
+my @files = split /\n/, $dir_contents;
+
+my $file_2_present = grep { $_ eq 'custom_log.2' } @files;
+my $file_present = grep { $_ eq 'custom_log' } @files;
+my $file_1_present = grep { $_ eq 'custom_log.1' } @files;
+
+if ($file_2_present and $file_present and $file_1_present) {
+  print "Success: all the files the persisted\n";
+} else {
+die "Error: some files did not presist";
+}
+
+EOF
+
+--echo # Cleanup
+--perl
+my $dir_contents = `ls -1 "$test_dir"`;
+my @files = grep { -f "$test_dir/$_" } split /\n/, $dir_contents;
+
+foreach my $file (@files) {
+    if ($file =~ /^custom_log\./) {
+        unlink "$test_dir/$file" or die "Cannot remove $test_dir/$file: $!";
+    }
+}
+
+print "Cleanup completed successfully.\n";
+
+EOF
+
+SET GLOBAL server_audit_logging = OFF;
+SET GLOBAL server_audit_file_path = '';
+SET GLOBAL server_audit_file_rotations = DEFAULT;
+
+
+
+
 --echo
 --echo =======================================================================
 --echo Remove the temporary audit logs
