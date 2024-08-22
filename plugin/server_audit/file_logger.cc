@@ -23,7 +23,6 @@
 #include <my_config.h>
 #include <stdio.h>
 #include <fcntl.h>
-#include "mysql/components/services/psi_mutex_bits.h"
 #include "my_io.h"
 #include "sql/mysqld.h"
 #include "my_thread_local.h"
@@ -185,6 +184,19 @@ bool logger_time_to_rotate(LOGGER_HANDLE *log)
   return 0;
 }
 
+
+/*
+   Returns the remaining space available in the file for logging, measured in bytes.
+*/
+
+int logger_space_left(LOGGER_HANDLE *log) {
+    int filesize;
+    if (log->rotations > 0 &&
+        (filesize= my_tell(log->file, MYF(0))) != (int) -1) {
+        return log->size_limit - filesize;
+    }
+    return (int) -1;
+}
 
 int logger_write_r(LOGGER_HANDLE *log, bool allow_rotations,
                           const char *buffer, size_t size)

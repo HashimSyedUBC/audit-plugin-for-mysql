@@ -62,6 +62,8 @@ typedef struct logger_handle_st {
   char path[FN_REFLEN];
   unsigned long long size_limit;
   unsigned int rotations;
+  unsigned int buffer_time;
+  unsigned int buffer_size;
   size_t path_len;
   mysql_mutex_t lock;
 } LSFS;
@@ -73,6 +75,7 @@ int logger_close(LOGGER_HANDLE *log);
 int logger_write_r(LOGGER_HANDLE *log, bool allow_rotations,
                           const char *buffer, size_t size);
 int logger_rotate(LOGGER_HANDLE *log);
+int logger_space_left(LOGGER_HANDLE *log);
 bool logger_time_to_rotate(LOGGER_HANDLE *log);
 void logger_init_mutexes();
 

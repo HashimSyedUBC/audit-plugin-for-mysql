@@ -15,6 +15,6 @@
 # along with this program; if not, write to the Free Software
 # Foundation, Inc., 51 Franklin Street, Fifth Floor, Boston, MA 02110-1335 USA
 
-SET(SOURCES server_audit.cc file_logger.cc)
+SET(SOURCES server_audit.cc file_logger.cc thr_timer.cc)
 
 MYSQL_ADD_PLUGIN(server_audit ${SOURCES} MODULE_ONLY MODULE_OUTPUT_NAME "server_audit")
